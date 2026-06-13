@@ -1,0 +1,8 @@
+{
+  "name": "@supermarket/api-sdk",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Shared backend route inventory and transport helpers for frontend apps.",
+  "type": "module"
+}
+

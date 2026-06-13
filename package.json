@@ -1,0 +1,19 @@
+{
+  "name": "@supermarket/frontend-apps",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Frontend monorepo for checkout, inventory, and management applications.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
+

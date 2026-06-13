@@ -1,0 +1,7 @@
+{
+  "name": "@supermarket/checkout-web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Checkout frontend application."
+}
+
