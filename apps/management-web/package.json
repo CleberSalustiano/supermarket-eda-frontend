@@ -14,6 +14,7 @@
     "test:e2e": "npm run build && start-server-and-test preview http://127.0.0.1:4200 cy:run"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.4.0",
     "@supermarket/api-sdk": "0.1.0",
     "@supermarket/frontend-config": "0.1.0",
     "@supermarket/frontend-tenant": "0.1.0",
@@ -21,6 +22,8 @@
     "@tanstack/react-query": "5.81.5",
     "react": "19.2.7",
     "react-dom": "19.2.7",
-    "react-router-dom": "7.6.2"
+    "react-hook-form": "^7.79.0",
+    "react-router-dom": "7.6.2",
+    "zod": "^4.4.3"
   }
 }

@@ -15,6 +15,14 @@ export interface ApiRequestOptions {
   baseUrl?: string;
 }
 
+export interface ApiErrorResponseBody {
+  statusCode: number;
+  message: string;
+  path: string;
+  correlationId: string;
+  timestamp: string;
+}
+
 export class ApiClientError extends Error {
   constructor(
     message: string,
@@ -24,6 +32,33 @@ export class ApiClientError extends Error {
     super(message);
     this.name = 'ApiClientError';
   }
+}
+
+export function resolveApiClientErrorMessage(
+  error: unknown,
+  fallbackMessage = 'The request could not be completed.'
+): string {
+  if (error instanceof ApiClientError && isApiErrorResponseBody(error.responseBody)) {
+    return error.responseBody.message;
+  }
+
+  if (error instanceof ApiClientError) {
+    return error.message;
+  }
+
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return fallbackMessage;
+}
+
+export function resolveApiClientCorrelationId(error: unknown): string | undefined {
+  if (error instanceof ApiClientError && isApiErrorResponseBody(error.responseBody)) {
+    return error.responseBody.correlationId;
+  }
+
+  return undefined;
 }
 
 export async function requestJson<TResponse>(
@@ -74,4 +109,23 @@ async function readResponseBody(response: Response): Promise<unknown> {
   } catch {
     return responseText;
   }
+}
+
+function isApiErrorResponseBody(value: unknown): value is ApiErrorResponseBody {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  return (
+    'statusCode' in value &&
+    typeof value.statusCode === 'number' &&
+    'message' in value &&
+    typeof value.message === 'string' &&
+    'path' in value &&
+    typeof value.path === 'string' &&
+    'correlationId' in value &&
+    typeof value.correlationId === 'string' &&
+    'timestamp' in value &&
+    typeof value.timestamp === 'string'
+  );
 }
