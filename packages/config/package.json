@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "description": "Shared configuration package for frontend applications.",
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "zod": "3.25.67"
+  },
+  "exports": "./src/index.ts"
 }
-

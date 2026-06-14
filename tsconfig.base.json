@@ -2,6 +2,11 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ES2022"
+    ],
     "moduleResolution": "Bundler",
     "strict": true,
     "noImplicitOverride": true,
@@ -10,7 +15,7 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
-    "baseUrl": "."
+    "baseUrl": ".",
+    "jsx": "react-jsx"
   }
 }
-

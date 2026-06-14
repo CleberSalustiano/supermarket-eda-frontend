@@ -1,0 +1,35 @@
+{
+  "name": "@supermarket/operations-mobile",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Mobile operations application for inventory operators and store management.",
+  "main": "expo/AppEntry",
+  "scripts": {
+    "dev": "expo start --clear",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "npm run typecheck",
+    "test": "jest --config jest.config.cjs --runInBand"
+  },
+  "dependencies": {
+    "@react-navigation/bottom-tabs": "^7.18.0",
+    "@react-navigation/native": "^7.3.1",
+    "@supermarket/api-sdk": "0.1.0",
+    "@supermarket/frontend-config": "0.1.0",
+    "@supermarket/frontend-tenant": "0.1.0",
+    "@supermarket/frontend-ui": "0.1.0",
+    "@tanstack/react-query": "^5.101.0",
+    "expo": "^56.0.11",
+    "expo-modules-core": "^56.0.16",
+    "lucide-react-native": "^1.18.0",
+    "nativewind": "^4.2.5",
+    "react": "19.2.3",
+    "react-native": "^0.85.3",
+    "react-native-gesture-handler": "~2.31.1",
+    "react-native-reanimated": "4.3.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "^4.25.2",
+    "react-native-svg": "15.15.4"
+  }
+}

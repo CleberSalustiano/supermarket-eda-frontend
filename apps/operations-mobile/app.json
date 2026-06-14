@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Operations Mobile",
+    "slug": "operations-mobile",
+    "scheme": "operations-mobile",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ]
+  }
+}

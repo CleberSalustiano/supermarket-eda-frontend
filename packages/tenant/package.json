@@ -3,6 +3,6 @@
   "private": true,
   "version": "0.1.0",
   "description": "Tenant-aware transport conventions for frontend applications.",
-  "type": "module"
+  "type": "module",
+  "exports": "./src/index.ts"
 }
-

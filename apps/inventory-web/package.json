@@ -2,6 +2,25 @@
   "name": "@supermarket/inventory-web",
   "private": true,
   "version": "0.1.0",
-  "description": "Inventory frontend application."
+  "description": "Inventory frontend application.",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 4102",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4202",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "npm run typecheck",
+    "test": "vitest run",
+    "cy:run": "cypress run --config-file cypress.config.ts",
+    "test:e2e": "npm run build && start-server-and-test preview http://127.0.0.1:4202 cy:run"
+  },
+  "dependencies": {
+    "@supermarket/api-sdk": "0.1.0",
+    "@supermarket/frontend-config": "0.1.0",
+    "@supermarket/frontend-tenant": "0.1.0",
+    "@supermarket/frontend-ui": "0.1.0",
+    "@tanstack/react-query": "5.81.5",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "react-router-dom": "7.6.2"
+  }
 }
-

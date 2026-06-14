@@ -2,18 +2,52 @@
   "name": "@supermarket/frontend-apps",
   "private": true,
   "version": "0.1.0",
-  "description": "Frontend monorepo for checkout, inventory, and management applications.",
+  "description": "Frontend monorepo for checkout, inventory, management, and mobile operations applications.",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
+    "dev:checkout": "npm run dev --workspace @supermarket/checkout-web",
+    "dev:inventory": "npm run dev --workspace @supermarket/inventory-web",
+    "dev:management": "npm run dev --workspace @supermarket/management-web",
+    "dev:mobile": "npm run dev --workspace @supermarket/operations-mobile",
+    "preview:checkout": "npm run preview --workspace @supermarket/checkout-web",
+    "preview:inventory": "npm run preview --workspace @supermarket/inventory-web",
+    "preview:management": "npm run preview --workspace @supermarket/management-web",
     "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e:web": "npm run test:e2e --workspace @supermarket/checkout-web && npm run test:e2e --workspace @supermarket/inventory-web && npm run test:e2e --workspace @supermarket/management-web"
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "@fontsource/ibm-plex-mono": "5.1.1",
+    "@fontsource/manrope": "5.1.0",
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/jest-native": "^5.4.3",
+    "@testing-library/react": "16.3.0",
+    "@testing-library/react-native": "13.2.0",
+    "@testing-library/user-event": "14.6.1",
+    "@types/jest": "^30.0.0",
+    "@types/node": "24.0.1",
+    "@types/react": "19.1.8",
+    "@types/react-dom": "19.1.6",
+    "@vitejs/plugin-react-swc": "3.10.2",
+    "autoprefixer": "10.4.21",
+    "cypress": "14.5.4",
+    "jest": "^29.7.0",
+    "jest-expo": "^56.0.5",
+    "jsdom": "26.1.0",
+    "postcss": "8.5.6",
+    "react-test-renderer": "^19.2.3",
+    "start-server-and-test": "2.0.12",
+    "tailwindcss": "3.4.17",
+    "typescript": "5.8.3",
+    "vite": "7.0.0",
+    "vitest": "3.2.4"
   }
 }
-
