@@ -1,6 +1,9 @@
+import { checkoutSalePaymentMethods } from '@supermarket/api-sdk';
 import { z } from 'zod';
 
 export const defaultCheckoutTenantId = '8f6d7df2-0d8a-4c81-9ad3-6f9c3c5198b1';
+export const defaultCheckoutRegisterId = 'register-01';
+export const defaultCheckoutOperatorId = '2b6b69a3-1c2e-442e-928a-8f0614aa7d0e';
 export const checkoutWorkspaceStorageKey = 'supermarket.checkout.workspace';
 
 const checkoutPosSessionSchema = z.object({
@@ -32,7 +35,7 @@ const checkoutSaleSchema = z.object({
   tenantId: z.string().uuid(),
   sessionId: z.string().uuid(),
   status: z.enum(['OPEN', 'PAID', 'COMPLETED', 'CANCELED']),
-  paymentMethod: z.string().nullable(),
+  paymentMethod: z.enum(checkoutSalePaymentMethods).nullable(),
   paidAmount: z.number().nullable(),
   changeAmount: z.number().nullable(),
   paidAt: z.string().nullable(),

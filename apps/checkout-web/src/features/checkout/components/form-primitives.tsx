@@ -66,6 +66,25 @@ export function TextInput({
   );
 }
 
+export function SelectInput({
+  className,
+  children,
+  ...props
+}: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      className={cn(
+        'h-11 w-full rounded-2xl border border-line bg-stone-50 px-4 text-sm text-ink outline-none transition',
+        'focus:border-accent focus:bg-white focus:ring-4 focus:ring-accent/10',
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </select>
+  );
+}
+
 export function PrimaryButton({
   tone = 'accent',
   className,
