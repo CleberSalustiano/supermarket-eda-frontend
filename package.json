@@ -19,6 +19,10 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "local:web:start": "node scripts/local-web-apps.js start",
+    "local:web:stop": "node scripts/local-web-apps.js stop",
+    "local:web:status": "node scripts/local-web-apps.js status",
+    "test:scripts": "node --test scripts/",
     "test:e2e:web": "npm run test:e2e --workspace @supermarket/checkout-web && npm run test:e2e --workspace @supermarket/inventory-web && npm run test:e2e --workspace @supermarket/management-web"
   },
   "engines": {

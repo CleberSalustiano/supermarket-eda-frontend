@@ -3,17 +3,22 @@ import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   addCheckoutSaleItem,
-  backendServices,
+  cancelCheckoutSale,
+  closeCheckoutPosSession,
+  completeCheckoutSale,
   fetchServiceHealth,
   openCheckoutPosSession,
+  processCheckoutSalePayment,
   removeCheckoutSaleItem,
   resolveApiClientCorrelationId,
   resolveApiClientErrorMessage,
   scanCheckoutCatalogItemByBarcode,
   startCheckoutSale,
+  type CancelCheckoutSale,
   type CheckoutCatalogItem,
+  type CompleteCheckoutSale,
   type CheckoutSale,
-  type CheckoutSaleStatus
+  type CloseCheckoutPosSession
 } from '@supermarket/api-sdk';
 import {
   ActionCard,
@@ -22,17 +27,14 @@ import {
   MetricCard,
   StatusPill
 } from '@supermarket/frontend-ui';
-import { useForm, type FieldValues, type Path, type UseFormReturn } from 'react-hook-form';
-import {
-  Boxes,
-  CircleDollarSign,
-  Receipt,
-  ReceiptText,
-  ScanLine
-} from 'lucide-react';
-import { z } from 'zod';
+import { useForm, type UseFormReturn } from 'react-hook-form';
+import { Boxes, CreditCard, Receipt, ReceiptText } from 'lucide-react';
+import type { z } from 'zod';
 
 import { checkoutServiceBaseUrl } from '../environment';
+import { CancellationClosurePanel } from '../features/checkout/components/cancellation-closure-panel';
+import { RouteInventorySection } from '../features/checkout/components/route-inventory-section';
+import { PaymentCompletionPanel } from '../features/checkout/components/payment-completion-panel';
 import {
   CheckoutFormCard,
   DefinitionList,
@@ -44,66 +46,49 @@ import {
   TextInput
 } from '../features/checkout/components/form-primitives';
 import { usePersistedCheckoutWorkspace } from '../features/checkout/hooks/use-persisted-checkout-workspace';
-import { defaultCheckoutTenantId } from '../features/checkout/lib/workspace';
+import { actionCards, navigationItems } from '../features/checkout/lib/dashboard-content';
+import { submitSchemaValidatedForm } from '../features/checkout/lib/form-validation';
+import {
+  formatCurrency,
+  formatDateTime,
+  formatPaymentMethod,
+  shortenUuid
+} from '../features/checkout/lib/formatters';
+import {
+  buildSaleDefinitionItems,
+  deriveCheckoutCapabilities,
+  deriveRecoveredReceipt,
+  isTerminalSale,
+  resolveSaleStatusTone
+} from '../features/checkout/lib/sale-state';
+import {
+  defaultCheckoutOperatorId,
+  defaultCheckoutRegisterId,
+  defaultCheckoutTenantId
+} from '../features/checkout/lib/workspace';
 import {
   cartMutationFormSchema,
   openSessionFormSchema,
   tenantIdSchema,
+  type CancelSaleFormValues,
   type CartMutationFormValues,
-  type OpenSessionFormValues
+  type CloseSessionFormValues,
+  type OpenSessionFormValues,
+  type PaymentFormValues
 } from '../features/checkout/schemas/checkout-forms';
-
-const navigationItems = [
-  {
-    label: 'Workspace control',
-    description: 'Keep tenant targeting explicit while the backend still has no authenticated user session.'
-  },
-  {
-    label: 'Session execution',
-    description: 'Open a cashier session and preserve the local workspace so refreshes do not lose context.'
-  },
-  {
-    label: 'Cart execution',
-    description: 'Scan the cached catalog and mutate the current sale without leaving the cashier surface.'
-  }
-] as const;
-
-const actionCards = [
-  {
-    title: 'Open a register session',
-    description: 'Capture the operator, register, and opening float before a sale begins.',
-    footer: 'POST /pos-sessions',
-    icon: <Receipt className="size-5" />
-  },
-  {
-    title: 'Start and persist a sale',
-    description: 'Create the sale once, keep it visible locally, and continue safely after a refresh.',
-    footer: 'POST /sales',
-    icon: <ReceiptText className="size-5" />
-  },
-  {
-    title: 'Scan from the local catalog',
-    description: 'Resolve product information from the checkout cache before mutating the cart.',
-    footer: 'GET /catalog-items/barcodes/:barcode',
-    icon: <ScanLine className="size-5" />
-  },
-  {
-    title: 'Mutate cart totals live',
-    description: 'Add or remove line quantities while the sale stays open and visible on the screen.',
-    footer: 'POST /sales/:saleId/items and /items/removals',
-    icon: <CircleDollarSign className="size-5" />
-  }
-] as const;
 
 export function CheckoutDashboardPage() {
   const [workspace, setWorkspace, resetWorkspace] = usePersistedCheckoutWorkspace();
   const [feedback, setFeedback] = useState<CheckoutFeedback | null>(null);
   const [scanPreview, setScanPreview] = useState<CheckoutCatalogItem | null>(null);
+  const [completionResult, setCompletionResult] = useState<CompleteCheckoutSale | null>(null);
+  const [cancellationResult, setCancellationResult] = useState<CancelCheckoutSale | null>(null);
+  const [closureResult, setClosureResult] = useState<CloseCheckoutPosSession | null>(null);
 
   const openSessionForm = useForm<OpenSessionFormValues>({
     defaultValues: {
-      registerId: '',
-      operatorId: '',
+      registerId: defaultCheckoutRegisterId,
+      operatorId: defaultCheckoutOperatorId,
       openingFloatAmount: '150.00'
     }
   });
@@ -112,6 +97,26 @@ export function CheckoutDashboardPage() {
     defaultValues: {
       barcode: '',
       quantity: '1'
+    }
+  });
+
+  const paymentForm = useForm<PaymentFormValues>({
+    defaultValues: {
+      paymentMethod: 'CASH',
+      paidAmount: ''
+    }
+  });
+
+  const cancelSaleForm = useForm<CancelSaleFormValues>({
+    defaultValues: {
+      reason: '',
+      managerApprovalCode: ''
+    }
+  });
+
+  const closeSessionForm = useForm<CloseSessionFormValues>({
+    defaultValues: {
+      declaredCashAmount: '150.00'
     }
   });
 
@@ -127,12 +132,12 @@ export function CheckoutDashboardPage() {
 
   const activeSession = workspace.activeSession;
   const activeSale = workspace.activeSale;
-  const hasOpenSession = activeSession?.status === 'OPEN';
-  const hasMutableSale = activeSale?.status === 'OPEN';
-  const canStartSale =
-    hasOpenSession && (activeSale === null || isTerminalSale(activeSale.status));
+  const capabilities = deriveCheckoutCapabilities(activeSession, activeSale);
+  const { hasOpenSession, hasMutableSale, canStartSale } = capabilities;
   const formsLocked = !tenantValidation.success;
   const tenantLocked = hasOpenSession;
+  const recoveredReceipt = deriveRecoveredReceipt(activeSale);
+  const receiptToDisplay = completionResult?.receipt ?? recoveredReceipt;
 
   const openSessionMutation = useMutation({
     mutationFn: (values: OpenSessionFormValues) =>
@@ -154,11 +159,18 @@ export function CheckoutDashboardPage() {
         activeSession: response,
         activeSale: null
       }));
+      closeSessionForm.setValue('declaredCashAmount', response.openingFloatAmount.toFixed(2), {
+        shouldDirty: false,
+        shouldValidate: false
+      });
       setScanPreview(null);
+      setCompletionResult(null);
+      setCancellationResult(null);
+      setClosureResult(null);
       setFeedback({
         tone: 'success',
         title: 'Session opened',
-        description: `Register ${response.registerId} is now open for operator ${response.operatorId}.`,
+        description: `Register ${response.registerId} is now open for operator ${shortenUuid(response.operatorId)}.`,
         detail: `Session id ${response.sessionId}`
       });
     },
@@ -188,7 +200,10 @@ export function CheckoutDashboardPage() {
         ...currentWorkspace,
         activeSale: response
       }));
+      resetSaleForms();
       setScanPreview(null);
+      setCompletionResult(null);
+      setCancellationResult(null);
       setFeedback({
         tone: 'success',
         title: 'Sale started',
@@ -289,10 +304,161 @@ export function CheckoutDashboardPage() {
     }
   });
 
-  function handleSaleMutationSuccess(
-    sale: CheckoutSale,
-    title: string
-  ): void {
+  const processPaymentMutation = useMutation({
+    mutationFn: (values: PaymentFormValues) =>
+      processCheckoutSalePayment(
+        {
+          tenantId: workspace.tenantId,
+          saleId: activeSale?.saleId ?? '',
+          paymentMethod: values.paymentMethod,
+          paidAmount: Number.parseFloat(values.paidAmount)
+        },
+        {
+          baseUrl: checkoutServiceBaseUrl
+        }
+      ),
+    onSuccess: (response) => {
+      setWorkspace((currentWorkspace) => ({
+        ...currentWorkspace,
+        activeSale: response
+      }));
+      const paymentMethodLabel =
+        response.paymentMethod === null ? 'Payment' : formatPaymentMethod(response.paymentMethod);
+      setFeedback({
+        tone: 'success',
+        title: 'Payment captured',
+        description: `${paymentMethodLabel} was recorded for ${formatCurrency(response.total)}.`,
+        detail:
+          response.changeAmount === null
+            ? `Sale id ${response.saleId}`
+            : `Change ${formatCurrency(response.changeAmount)}`
+      });
+    },
+    onError: (error) => {
+      setFeedback({
+        tone: 'danger',
+        title: 'Payment failed',
+        description: resolveApiClientErrorMessage(error),
+        detail: resolveApiClientCorrelationId(error)
+      });
+    }
+  });
+
+  const completeSaleMutation = useMutation({
+    mutationFn: () =>
+      completeCheckoutSale(
+        {
+          tenantId: workspace.tenantId,
+          saleId: activeSale?.saleId ?? ''
+        },
+        {
+          baseUrl: checkoutServiceBaseUrl
+        }
+      ),
+    onSuccess: (response) => {
+      setWorkspace((currentWorkspace) => ({
+        ...currentWorkspace,
+        activeSale: response
+      }));
+      setCompletionResult(response);
+      setCancellationResult(null);
+      setFeedback({
+        tone: 'success',
+        title: 'Sale completed',
+        description: `Receipt issued for ${formatCurrency(response.receipt.total)} with ${response.receipt.totalItemsQuantity} units.`,
+        detail: `Event ${response.eventPublicationStatus}`
+      });
+    },
+    onError: (error) => {
+      setFeedback({
+        tone: 'danger',
+        title: 'Sale completion failed',
+        description: resolveApiClientErrorMessage(error),
+        detail: resolveApiClientCorrelationId(error)
+      });
+    }
+  });
+
+  const cancelSaleMutation = useMutation({
+    mutationFn: (values: CancelSaleFormValues) =>
+      cancelCheckoutSale(
+        {
+          tenantId: workspace.tenantId,
+          saleId: activeSale?.saleId ?? '',
+          reason: values.reason.trim(),
+          ...(values.managerApprovalCode.trim().length === 0
+            ? {}
+            : { managerApprovalCode: values.managerApprovalCode.trim() })
+        },
+        {
+          baseUrl: checkoutServiceBaseUrl
+        }
+      ),
+    onSuccess: (response) => {
+      setWorkspace((currentWorkspace) => ({
+        ...currentWorkspace,
+        activeSale: response
+      }));
+      setCancellationResult(response);
+      setCompletionResult(null);
+      setFeedback({
+        tone: 'warning',
+        title: 'Sale canceled',
+        description: `Sale ${response.saleId} was canceled with reason "${response.cancellationReason ?? 'Not provided'}".`,
+        detail: `Event ${response.eventPublicationStatus}`
+      });
+    },
+    onError: (error) => {
+      setFeedback({
+        tone: 'danger',
+        title: 'Cancellation failed',
+        description: resolveApiClientErrorMessage(error),
+        detail: resolveApiClientCorrelationId(error)
+      });
+    }
+  });
+
+  const closeSessionMutation = useMutation({
+    mutationFn: (values: CloseSessionFormValues) =>
+      closeCheckoutPosSession(
+        {
+          tenantId: workspace.tenantId,
+          sessionId: activeSession?.sessionId ?? '',
+          declaredCashAmount: Number.parseFloat(values.declaredCashAmount)
+        },
+        {
+          baseUrl: checkoutServiceBaseUrl
+        }
+      ),
+    onSuccess: (response) => {
+      setWorkspace((currentWorkspace) => ({
+        ...currentWorkspace,
+        activeSession: response,
+        activeSale:
+          currentWorkspace.activeSale === null ||
+          !isTerminalSale(currentWorkspace.activeSale.status)
+            ? null
+            : currentWorkspace.activeSale
+      }));
+      setClosureResult(response);
+      setFeedback({
+        tone: 'success',
+        title: 'Session closed',
+        description: `Register ${response.registerId} was closed with declared cash ${formatCurrency(response.declaredCashAmount)}.`,
+        detail: `Event ${response.eventPublicationStatus}`
+      });
+    },
+    onError: (error) => {
+      setFeedback({
+        tone: 'danger',
+        title: 'Register closure failed',
+        description: resolveApiClientErrorMessage(error),
+        detail: resolveApiClientCorrelationId(error)
+      });
+    }
+  });
+
+  function handleSaleMutationSuccess(sale: CheckoutSale, title: string): void {
     setWorkspace((currentWorkspace) => ({
       ...currentWorkspace,
       activeSale: sale
@@ -317,11 +483,17 @@ export function CheckoutDashboardPage() {
     }));
   }
 
+  function resetSaleForms(): void {
+    paymentForm.reset({ paymentMethod: 'CASH', paidAmount: '' });
+    cancelSaleForm.reset({ reason: '', managerApprovalCode: '' });
+  }
+
   function clearTerminalSale(): void {
     setWorkspace((currentWorkspace) => ({
       ...currentWorkspace,
       activeSale: null
     }));
+    resetSaleForms();
     setScanPreview(null);
     setFeedback({
       tone: 'warning',
@@ -331,14 +503,14 @@ export function CheckoutDashboardPage() {
     });
   }
 
-  const cartMutationPending =
+  const cartMutationPendingState =
     scanItemMutation.isPending || addItemMutation.isPending || removeItemMutation.isPending;
 
   return (
     <AppShell
       eyebrow="Checkout Web"
-      title="Checkout execution is now operational."
-      description="This screen keeps the cashier workflow sparse and fast, while using live backend mutations for session startup and cart handling."
+      title="Checkout execution now reaches terminal flows."
+      description="This screen keeps the cashier workflow sparse and fast, while using live backend mutations from session startup all the way to payment, completion, cancellation, and closure."
       navigationItems={navigationItems.map((item) => ({ ...item }))}
       sidebarFooter={
         <div className="space-y-3 rounded-2xl border border-line bg-white/75 p-4">
@@ -351,17 +523,7 @@ export function CheckoutDashboardPage() {
             <StatusPill tone={hasOpenSession ? 'success' : 'warning'}>
               {hasOpenSession ? 'Session open' : 'No open session'}
             </StatusPill>
-            <StatusPill
-              tone={
-                activeSale === null
-                  ? 'neutral'
-                  : activeSale.status === 'OPEN'
-                    ? 'success'
-                    : activeSale.status === 'PAID'
-                      ? 'warning'
-                      : 'neutral'
-              }
-            >
+            <StatusPill tone={resolveSaleStatusTone(activeSale?.status)}>
               {activeSale === null ? 'No active sale' : `Sale ${activeSale.status}`}
             </StatusPill>
           </div>
@@ -372,8 +534,8 @@ export function CheckoutDashboardPage() {
         <div className="grid gap-4 md:grid-cols-3">
           <MetricCard
             label="Live write flows"
-            value="3 mutations"
-            detail="Session opening, sale creation, and cart mutation already submit against the running checkout backend."
+            value="7 mutations"
+            detail="Session opening, sale changes, payment, completion, cancellation, and closure now submit against the running checkout backend."
             icon={<Receipt className="size-5" />}
           />
           <MetricCard
@@ -384,10 +546,10 @@ export function CheckoutDashboardPage() {
             tone="accent"
           />
           <MetricCard
-            label="Catalog dependency"
-            value="Management sync"
-            detail="Barcode scans succeed only for products already published from management into the local checkout cache."
-            icon={<ScanLine className="size-5" />}
+            label="Terminal support"
+            value="Receipt ready"
+            detail="Receipt and closure summaries remain visible on the cashier surface once the terminal actions succeed."
+            icon={<CreditCard className="size-5" />}
           />
         </div>
 
@@ -467,18 +629,11 @@ export function CheckoutDashboardPage() {
                   { label: 'Session id', value: activeSession?.sessionId ?? 'No session yet' },
                   { label: 'Register', value: activeSession?.registerId ?? 'Not selected' },
                   { label: 'Operator', value: activeSession?.operatorId ?? 'Not selected' },
-                  {
-                    label: 'Sale id',
-                    value: activeSale?.saleId ?? 'No sale yet'
-                  }
+                  { label: 'Sale id', value: activeSale?.saleId ?? 'No sale yet' }
                 ]}
               />
               {activeSale !== null && isTerminalSale(activeSale.status) ? (
-                <SecondaryButton
-                  type="button"
-                  className="w-full"
-                  onClick={clearTerminalSale}
-                >
+                <SecondaryButton type="button" className="w-full" onClick={clearTerminalSale}>
                   Clear terminal sale from workspace
                 </SecondaryButton>
               ) : null}
@@ -505,9 +660,9 @@ export function CheckoutDashboardPage() {
 
         <AppSection
           title="MVP feature lanes"
-          description="This slice focuses on the fastest live cashier path first: session opening, sale creation, barcode resolution, and cart mutation."
+          description="This slice now covers the full cashier path that already exists in the backend, while keeping the UI optimized for speed and recovery."
         >
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-3">
             {actionCards.map((actionCard) => (
               <ActionCard key={actionCard.title} {...actionCard} />
             ))}
@@ -540,17 +695,18 @@ export function CheckoutDashboardPage() {
                   error={openSessionForm.formState.errors.registerId?.message}
                 >
                   <TextInput
-                    placeholder="register-01"
+                    placeholder={defaultCheckoutRegisterId}
                     disabled={hasOpenSession}
                     {...openSessionForm.register('registerId')}
                   />
                 </FormField>
                 <FormField
                   label="Operator id"
+                  hint="UUID v4 required by the backend"
                   error={openSessionForm.formState.errors.operatorId?.message}
                 >
                   <TextInput
-                    placeholder="cashier-01"
+                    placeholder={defaultCheckoutOperatorId}
                     disabled={hasOpenSession}
                     {...openSessionForm.register('operatorId')}
                   />
@@ -575,10 +731,7 @@ export function CheckoutDashboardPage() {
                   items={[
                     { label: 'Status', value: activeSession.status },
                     { label: 'Opened at', value: formatDateTime(activeSession.openedAt) },
-                    {
-                      label: 'Opening float',
-                      value: formatCurrency(activeSession.openingFloatAmount)
-                    },
+                    { label: 'Opening float', value: formatCurrency(activeSession.openingFloatAmount) },
                     { label: 'Session id', value: activeSession.sessionId }
                   ]}
                 />
@@ -595,14 +748,14 @@ export function CheckoutDashboardPage() {
                   type="button"
                   onClick={() => {
                     openSessionForm.reset({
-                      registerId: '',
-                      operatorId: '',
+                      registerId: defaultCheckoutRegisterId,
+                      operatorId: defaultCheckoutOperatorId,
                       openingFloatAmount: '150.00'
                     });
                     openSessionMutation.reset();
                   }}
                 >
-                  Clear form
+                  Reset form
                 </SecondaryButton>
               </div>
             </form>
@@ -610,7 +763,7 @@ export function CheckoutDashboardPage() {
 
           <CheckoutFormCard
             title="Start sale"
-            description="Create the active sale after the register session exists. This app keeps just one local active sale visible at a time until broader query endpoints land."
+            description="Create the active sale after the register session exists. This app keeps one local active sale visible at a time until broader query endpoints land."
             actionLabel={hasMutableSale ? 'Sale live' : 'Ready'}
             actionTone={hasMutableSale ? 'success' : 'warning'}
           >
@@ -618,7 +771,7 @@ export function CheckoutDashboardPage() {
               <SectionIntro
                 icon={<ReceiptText className="size-5" />}
                 title="One visible active sale"
-                description="When a sale is open, the cashier surface keeps totals, items, and mutation actions close together. Payment and closure remain in the next slice."
+                description="When a sale is open, the cashier surface keeps totals, items, payment, and terminal actions close together."
               />
 
               {activeSale === null ? (
@@ -628,14 +781,7 @@ export function CheckoutDashboardPage() {
                   description="Open a session first, then start a sale to unlock barcode scan and cart mutation."
                 />
               ) : (
-                <DefinitionList
-                  items={[
-                    { label: 'Sale status', value: activeSale.status },
-                    { label: 'Sale id', value: activeSale.saleId },
-                    { label: 'Item quantity', value: activeSale.totalItemsQuantity },
-                    { label: 'Sale total', value: formatCurrency(activeSale.total) }
-                  ]}
-                />
+                <DefinitionList items={buildSaleDefinitionItems(activeSale)} />
               )}
 
               <div className="flex flex-wrap gap-3">
@@ -734,7 +880,7 @@ export function CheckoutDashboardPage() {
               <div className="flex flex-wrap gap-3">
                 <SecondaryButton
                   type="button"
-                  disabled={formsLocked || !hasMutableSale || cartMutationPending}
+                  disabled={formsLocked || !hasMutableSale || cartMutationPendingState}
                   onClick={() => {
                     submitValidatedCartMutation(
                       cartMutationForm,
@@ -749,13 +895,13 @@ export function CheckoutDashboardPage() {
                 </SecondaryButton>
                 <PrimaryButton
                   type="submit"
-                  disabled={formsLocked || !hasMutableSale || cartMutationPending}
+                  disabled={formsLocked || !hasMutableSale || cartMutationPendingState}
                 >
                   {addItemMutation.isPending ? 'Adding...' : 'Add item'}
                 </PrimaryButton>
                 <SecondaryButton
                   type="button"
-                  disabled={formsLocked || !hasMutableSale || cartMutationPending}
+                  disabled={formsLocked || !hasMutableSale || cartMutationPendingState}
                   onClick={() => {
                     submitValidatedCartMutation(
                       cartMutationForm,
@@ -775,8 +921,8 @@ export function CheckoutDashboardPage() {
           <CheckoutFormCard
             title="Current sale snapshot"
             description="The cart stays visible locally because the backend still has no sale read endpoint for recovery or support-oriented screens."
-            actionLabel={hasMutableSale ? 'Live cart' : 'No live cart'}
-            actionTone={hasMutableSale ? 'success' : 'neutral'}
+            actionLabel={hasMutableSale ? 'Live cart' : activeSale === null ? 'No live cart' : activeSale.status}
+            actionTone={resolveSaleStatusTone(activeSale?.status)}
           >
             {activeSale === null ? (
               <FeedbackBanner
@@ -786,14 +932,7 @@ export function CheckoutDashboardPage() {
               />
             ) : (
               <div className="space-y-4">
-                <DefinitionList
-                  items={[
-                    { label: 'Status', value: activeSale.status },
-                    { label: 'Subtotal', value: formatCurrency(activeSale.subtotal) },
-                    { label: 'Total', value: formatCurrency(activeSale.total) },
-                    { label: 'Items', value: activeSale.totalItemsQuantity }
-                  ]}
-                />
+                <DefinitionList items={buildSaleDefinitionItems(activeSale)} />
 
                 {activeSale.items.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-line bg-stone-50 px-4 py-6">
@@ -816,9 +955,7 @@ export function CheckoutDashboardPage() {
                             </p>
                           </div>
                           <div className="grid gap-2 text-right">
-                            <span className="text-sm font-medium text-ink">
-                              Qty {item.quantity}
-                            </span>
+                            <span className="text-sm font-medium text-ink">Qty {item.quantity}</span>
                             <span className="text-sm font-semibold text-ink">
                               {formatCurrency(item.lineTotal)}
                             </span>
@@ -833,20 +970,45 @@ export function CheckoutDashboardPage() {
           </CheckoutFormCard>
         </div>
 
-        <AppSection
-          title="Current route inventory"
-          description="These are the live backend routes already supporting the operational slice now visible on the screen."
-        >
-          <div className="rounded-3xl border border-line bg-stone-950 px-5 py-4 text-stone-100">
-            <ul className="space-y-2 font-mono text-sm">
-              <li>{backendServices.checkout.routes.openPosSession}</li>
-              <li>{backendServices.checkout.routes.startSale}</li>
-              <li>/catalog-items/barcodes/:barcode</li>
-              <li>{backendServices.checkout.routes.addSaleItem(':saleId')}</li>
-              <li>{backendServices.checkout.routes.removeSaleItem(':saleId')}</li>
-            </ul>
-          </div>
-        </AppSection>
+        <div className="grid gap-6 xl:grid-cols-2">
+          <PaymentCompletionPanel
+            paymentForm={paymentForm}
+            activeSale={activeSale}
+            capabilities={capabilities}
+            formsLocked={formsLocked}
+            isPaymentPending={processPaymentMutation.isPending}
+            isCompletionPending={completeSaleMutation.isPending}
+            completionResult={completionResult}
+            receiptToDisplay={receiptToDisplay}
+            onSubmitPayment={(values) => {
+              processPaymentMutation.mutate(values);
+            }}
+            onCompleteSale={() => {
+              completeSaleMutation.mutate();
+            }}
+          />
+
+          <CancellationClosurePanel
+            cancelSaleForm={cancelSaleForm}
+            closeSessionForm={closeSessionForm}
+            activeSale={activeSale}
+            activeSession={activeSession}
+            capabilities={capabilities}
+            formsLocked={formsLocked}
+            isCancellationPending={cancelSaleMutation.isPending}
+            isClosurePending={closeSessionMutation.isPending}
+            cancellationResult={cancellationResult}
+            closureResult={closureResult}
+            onCancelSale={(values) => {
+              cancelSaleMutation.mutate(values);
+            }}
+            onCloseSession={(values) => {
+              closeSessionMutation.mutate(values);
+            }}
+          />
+        </div>
+
+        <RouteInventorySection />
       </div>
     </AppShell>
   );
@@ -859,24 +1021,6 @@ interface CheckoutFeedback {
   detail?: string;
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD'
-  }).format(value);
-}
-
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  }).format(new Date(value));
-}
-
-function isTerminalSale(status: CheckoutSaleStatus): boolean {
-  return status === 'COMPLETED' || status === 'CANCELED';
-}
-
 function submitValidatedCartMutation(
   form: UseFormReturn<CartMutationFormValues>,
   schema: z.ZodType<CartMutationFormValues>,
@@ -885,30 +1029,3 @@ function submitValidatedCartMutation(
   submitSchemaValidatedForm(form, schema, form.getValues(), onValid);
 }
 
-function submitSchemaValidatedForm<TFormValues extends FieldValues>(
-  form: UseFormReturn<TFormValues>,
-  schema: z.ZodType<TFormValues>,
-  values: TFormValues,
-  onValid: (parsedValues: TFormValues) => void
-): void {
-  form.clearErrors();
-
-  const validationResult = schema.safeParse(values);
-
-  if (!validationResult.success) {
-    for (const issue of validationResult.error.issues) {
-      const fieldName = issue.path[0];
-
-      if (typeof fieldName === 'string') {
-        form.setError(fieldName as Path<TFormValues>, {
-          type: 'manual',
-          message: issue.message
-        });
-      }
-    }
-
-    return;
-  }
-
-  onValid(validationResult.data);
-}
