@@ -12,3 +12,4 @@ coverage/
 .expo-shared/
 cypress/videos/
 cypress/screenshots/
+.local-run/
