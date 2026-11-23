@@ -1,7 +1,8 @@
-import { defaultServiceBaseUrls } from '@supermarket/frontend-config';
+import { developmentDefaults, resolveFrontendRuntimeConfig } from '@supermarket/frontend-config';
 
-export const managementServiceBaseUrl =
-  typeof import.meta.env.FRONTEND_MANAGEMENT_API_BASE_URL === 'string' &&
-  import.meta.env.FRONTEND_MANAGEMENT_API_BASE_URL.length > 0
-    ? import.meta.env.FRONTEND_MANAGEMENT_API_BASE_URL
-    : defaultServiceBaseUrls.management;
+export const runtimeConfigResult = resolveFrontendRuntimeConfig(
+  import.meta.env,
+  ['management', 'checkout'],
+  // Static guard: Vite drops the dev defaults from production bundles.
+  import.meta.env.MODE === 'production' ? null : developmentDefaults
+);

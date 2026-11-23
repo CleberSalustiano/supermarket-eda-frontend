@@ -32,6 +32,7 @@ describe('Checkout web shell', () => {
       completedAt: null,
       canceledAt: null,
       cancellationReason: null,
+      cancellationApprovedBy: null,
       totalItemsQuantity: 0,
       subtotal: 0,
       total: 0,
@@ -52,6 +53,7 @@ describe('Checkout web shell', () => {
       completedAt: null,
       canceledAt: null,
       cancellationReason: null,
+      cancellationApprovedBy: null,
       totalItemsQuantity: 1,
       subtotal: 22.9,
       total: 22.9,
@@ -82,6 +84,7 @@ describe('Checkout web shell', () => {
       completedAt: null,
       canceledAt: null,
       cancellationReason: null,
+      cancellationApprovedBy: null,
       totalItemsQuantity: 1,
       subtotal: 22.9,
       total: 22.9,
@@ -112,6 +115,7 @@ describe('Checkout web shell', () => {
       completedAt: '2026-06-14T12:04:00.000Z',
       canceledAt: null,
       cancellationReason: null,
+      cancellationApprovedBy: null,
       totalItemsQuantity: 1,
       subtotal: 22.9,
       total: 22.9,
@@ -154,36 +158,38 @@ describe('Checkout web shell', () => {
       }
     }).as('completeSale');
 
-    cy.visit('/');
+    cy.visit('/', {
+      onBeforeLoad(win) {
+        win.localStorage.clear();
+      }
+    });
     cy.wait('@health');
 
-    cy.contains('Checkout Web').should('be.visible');
-    cy.contains('Checkout execution now reaches terminal flows.').should('be.visible');
-
-    cy.contains('button', 'Open session').click();
+    cy.contains('h1', 'Abrir caixa').should('be.visible');
+    cy.contains('button', 'Abrir caixa').click();
     cy.wait('@openSession');
-    cy.contains('Session opened').should('be.visible');
 
-    cy.contains('button', 'Start sale').click();
+    cy.contains('button', 'Nova venda').click();
     cy.wait('@startSale');
-    cy.contains('Sale started').should('be.visible');
 
-    cy.get('input[placeholder="7891234567890"]').type('7891234567890');
-    cy.get('input[placeholder="1"]').clear().type('1');
-    cy.contains('button', 'Add item').click();
+    cy.focused().type('7891234567890{enter}');
     cy.wait('@addItem');
     cy.contains('Arabica coffee beans 1kg').should('be.visible');
 
-    cy.contains('button', 'Use exact total').click();
-    cy.contains('button', 'Process payment').click();
-    cy.wait('@processPayment');
-    cy.contains('Payment captured').should('be.visible');
+    // F8 focuses the empty amount; the exact total is typed; F8 again takes the payment.
+    cy.get('body').trigger('keydown', { key: 'F8' });
+    cy.focused().should('have.attr', 'inputmode', 'decimal').type('22,90');
+    cy.get('body').trigger('keydown', { key: 'F8' });
+    cy.wait('@processPayment').its('request.body').should('deep.equal', {
+      tenantId: '8f6d7df2-0d8a-4c81-9ad3-6f9c3c5198b1',
+      paymentMethod: 'CASH',
+      paidAmount: 22.9
+    });
+    cy.contains('h2', 'Pagamento recebido').should('be.visible');
 
-    cy.contains('button', 'Complete sale').click();
+    cy.get('body').trigger('keydown', { key: 'F9' });
     cy.wait('@completeSale');
-    cy.contains('Sale completed').should('be.visible');
-    cy.contains('Receipt summary').should('be.visible');
-    cy.contains('Completion event published.').should('be.visible');
+    cy.contains('Venda concluída às').should('be.visible');
   });
 
   it('cancels an open sale and closes the register', () => {
@@ -224,6 +230,7 @@ describe('Checkout web shell', () => {
       completedAt: null,
       canceledAt: null,
       cancellationReason: null,
+      cancellationApprovedBy: null,
       totalItemsQuantity: 0,
       subtotal: 0,
       total: 0,
@@ -253,6 +260,7 @@ describe('Checkout web shell', () => {
       status: 'CANCELED',
       canceledAt: '2026-06-14T12:03:00.000Z',
       cancellationReason: 'Customer gave up',
+      cancellationApprovedBy: null,
       updatedAt: '2026-06-14T12:03:00.000Z',
       eventPublicationStatus: 'published'
     }).as('cancelSale');
@@ -265,34 +273,172 @@ describe('Checkout web shell', () => {
       eventPublicationStatus: 'published'
     }).as('closeSession');
 
-    cy.visit('/');
+    cy.visit('/', {
+      onBeforeLoad(win) {
+        win.localStorage.clear();
+      }
+    });
     cy.wait('@health');
 
-    cy.contains('button', 'Open session').click();
+    cy.contains('button', 'Abrir caixa').click();
     cy.wait('@openSession');
-    cy.contains('Session opened').should('be.visible');
 
-    cy.contains('button', 'Start sale').click();
+    cy.contains('button', 'Nova venda').click();
     cy.wait('@startSale');
 
-    cy.get('input[placeholder="7891234567890"]').type('7891234567890');
-    cy.get('input[placeholder="1"]').clear().type('1');
-    cy.contains('button', 'Add item').click();
+    cy.focused().type('7891234567890{enter}');
     cy.wait('@addItem');
     cy.contains('Arabica coffee beans 1kg').should('be.visible');
 
-    cy.get('input[placeholder="Customer requested reversal"]').type('Customer gave up');
-    cy.contains('button', 'Cancel sale').click();
+    cy.get('body').trigger('keydown', { key: 'F4' });
+    cy.get('dialog[open]').within(() => {
+      cy.contains('h2', 'Cancelar venda').should('be.visible');
+      cy.focused().type('Customer gave up');
+      cy.contains('button', 'Confirmar cancelamento').click();
+    });
     cy.wait('@cancelSale').its('request.body').should('deep.equal', {
       tenantId,
       reason: 'Customer gave up'
     });
-    cy.contains('Sale canceled').should('be.visible');
-    cy.contains('Cancellation summary').should('be.visible');
+    cy.contains('Venda cancelada. Motivo: Customer gave up.').should('be.visible');
 
-    cy.contains('button', 'Close session').click();
+    cy.contains('button', 'Fechar caixa').click();
+    cy.get('dialog[open]').within(() => {
+      cy.contains('button', 'Fechar caixa').click();
+    });
     cy.wait('@closeSession');
-    cy.contains('Session closed').should('be.visible');
-    cy.contains('Session closure summary').should('be.visible');
+    cy.contains('Caixa register-01 fechado às').should('be.visible');
+  });
+
+  it('cancels a paid sale with manager code and PIN after 503 and 403 answers', () => {
+    const tenantId = '8f6d7df2-0d8a-4c81-9ad3-6f9c3c5198b1';
+    const saleId = 'd02f33a7-f2af-4623-a218-d1ed9dc11fd1';
+    const sessionId = '1c7281cc-c5ee-474a-884d-42d9b9be8293';
+    const managerPin = '2468';
+    const session = {
+      sessionId,
+      tenantId,
+      registerId: 'register-01',
+      operatorId: '2b6b69a3-1c2e-442e-928a-8f0614aa7d0e',
+      openingFloatAmount: 150,
+      declaredCashAmount: null,
+      status: 'OPEN',
+      openedAt: '2026-06-14T12:00:00.000Z',
+      closedAt: null,
+      createdAt: '2026-06-14T12:00:00.000Z',
+      updatedAt: '2026-06-14T12:00:00.000Z'
+    };
+    const paidSale = {
+      saleId,
+      tenantId,
+      sessionId,
+      status: 'PAID',
+      paymentMethod: 'CASH',
+      paidAmount: 22.9,
+      changeAmount: 0,
+      paidAt: '2026-06-14T12:02:00.000Z',
+      completedAt: null,
+      canceledAt: null,
+      cancellationReason: null,
+      cancellationApprovedBy: null,
+      totalItemsQuantity: 1,
+      subtotal: 22.9,
+      total: 22.9,
+      items: [
+        {
+          productId: '1fdabff2-df1e-4b4d-86d7-0ca929e0a7b9',
+          barcode: '7891234567890',
+          name: 'Arabica coffee beans 1kg',
+          unitOfMeasure: 'UN',
+          unitPrice: 22.9,
+          quantity: 1,
+          lineTotal: 22.9
+        }
+      ],
+      createdAt: '2026-06-14T12:01:00.000Z',
+      updatedAt: '2026-06-14T12:02:00.000Z'
+    };
+    const errorBody = (statusCode: number, code: string) => ({
+      statusCode,
+      body: {
+        statusCode,
+        message: 'Backend detail that must not be shown',
+        code,
+        path: `/sales/${saleId}/cancellation`,
+        correlationId: 'corr-approval',
+        timestamp: '2026-06-14T12:03:00.000Z'
+      }
+    });
+
+    cy.intercept('GET', '**/health', {
+      serviceName: 'checkout-service',
+      status: 'ok',
+      timestamp: '2026-06-14T12:00:00.000Z'
+    });
+    let attempts = 0;
+    cy.intercept('POST', '**/sales/*/cancellation', (request) => {
+      attempts += 1;
+      if (attempts === 1) {
+        request.reply(errorBody(503, 'DEPENDENCY_UNAVAILABLE'));
+      } else if (attempts === 2) {
+        request.reply(errorBody(403, 'AUTHORIZATION_DENIED'));
+      } else {
+        request.reply({
+          ...paidSale,
+          status: 'CANCELED',
+          canceledAt: '2026-06-14T12:04:00.000Z',
+          cancellationReason: 'Wrong payment method',
+          cancellationApprovedBy: {
+            employeeId: '5a1d1c68-3a0c-4f0e-9f84-0f0f7d9a2b11',
+            employeeCode: 'MANAGER-01',
+            fullName: 'Bruno Lima'
+          },
+          eventPublicationStatus: 'published'
+        });
+      }
+    }).as('cancelSale');
+
+    cy.visit('/', {
+      onBeforeLoad(win) {
+        win.localStorage.clear();
+        win.localStorage.setItem(
+          'supermarket.checkout.workspace',
+          JSON.stringify({ activeSession: session, activeSale: paidSale })
+        );
+      }
+    });
+
+    // Cypress cannot press Tab, so the fields are focused directly; submission is by Enter.
+    cy.get('body').trigger('keydown', { key: 'F4' });
+    cy.get('dialog[open]').within(() => {
+      cy.focused().type('Wrong payment method');
+      cy.get('input[autocapitalize="characters"]').type('manager-01');
+      cy.get('input[type="password"]').should('have.attr', 'inputmode', 'numeric').type(`${managerPin}{enter}`);
+    });
+    cy.wait('@cancelSale');
+    cy.get('dialog[open]').within(() => {
+      cy.contains('Gestão indisponível, tente novamente. A venda não foi cancelada.').should('be.visible');
+      cy.contains('Backend detail that must not be shown').should('not.exist');
+      cy.get('input[type="password"]').should('have.value', '').and('have.focus');
+      cy.get('input[autocapitalize="characters"]').should('have.value', 'manager-01');
+      cy.get('input[type="password"]').type(`1357{enter}`);
+    });
+    cy.wait('@cancelSale');
+    cy.get('dialog[open]').within(() => {
+      cy.contains('Código do gerente ou PIN inválido.').should('be.visible');
+      cy.get('input[type="password"]').should('have.value', '').and('have.focus').type(`${managerPin}{enter}`);
+    });
+    cy.wait('@cancelSale')
+      .its('request.body')
+      .should('deep.equal', {
+        tenantId,
+        reason: 'Wrong payment method',
+        managerApproval: { employeeCode: 'MANAGER-01', pin: managerPin }
+      });
+    cy.contains('Venda cancelada. Motivo: Wrong payment method.').should('be.visible');
+    cy.contains('Aprovado por Bruno Lima (MANAGER-01).').should('be.visible');
+    cy.window().then((win) => {
+      expect(JSON.stringify({ ...win.localStorage })).not.to.contain(managerPin);
+    });
   });
 });

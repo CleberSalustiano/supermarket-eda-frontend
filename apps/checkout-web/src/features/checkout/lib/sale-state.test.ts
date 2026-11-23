@@ -22,6 +22,7 @@ function createSale(overrides: Partial<CheckoutSale> = {}): CheckoutSale {
     completedAt: null,
     canceledAt: null,
     cancellationReason: null,
+    cancellationApprovedBy: null,
     totalItemsQuantity: 2,
     subtotal: 20,
     total: 20,

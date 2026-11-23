@@ -63,6 +63,52 @@ export interface RegisterManagementEmployeeResponse {
   eventPublicationStatus: IntegrationEventPublicationStatus;
 }
 
+export type ManagementEmployeeStatusFilter = 'active' | 'inactive' | 'all';
+
+export interface ManagementEmployee {
+  employeeId: string;
+  tenantId: string;
+  employeeCode: string;
+  fullName: string;
+  role: ManagementEmployeeRole;
+  active: boolean;
+  deactivatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ManagementEmployeeList {
+  items: ManagementEmployee[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ListManagementEmployeesInput {
+  tenantId: string;
+  status?: ManagementEmployeeStatusFilter;
+  limit?: number;
+  offset?: number;
+}
+
+export interface DeactivateManagementEmployeeInput {
+  tenantId: string;
+  employeeId: string;
+}
+
+export interface ChangeManagementEmployeePinInput {
+  tenantId: string;
+  employeeId: string;
+  pin: string;
+}
+
+export interface ChangeManagementEmployeePinResponse {
+  employeeId: string;
+  tenantId: string;
+  employeeCode: string;
+  pinChangedAt: string;
+}
+
 export interface ProfitAndLossReportDay {
   businessDate: string;
   revenueNetTotal: number;
@@ -156,6 +202,58 @@ export async function registerManagementEmployee(
         },
         input.tenantId
       )
+    }
+  );
+}
+
+export async function listManagementEmployees(
+  input: ListManagementEmployeesInput,
+  options: Pick<ApiRequestOptions, 'baseUrl' | 'signal'> = {}
+): Promise<ManagementEmployeeList> {
+  const routeUrl = new URL(backendServices.management.routes.listEmployees, 'http://localhost');
+
+  if (input.status !== undefined) {
+    routeUrl.searchParams.set('status', input.status);
+  }
+  if (input.limit !== undefined) {
+    routeUrl.searchParams.set('limit', String(input.limit));
+  }
+  if (input.offset !== undefined) {
+    routeUrl.searchParams.set('offset', String(input.offset));
+  }
+
+  return requestJson<ManagementEmployeeList>('management', `${routeUrl.pathname}${routeUrl.search}`, {
+    ...options,
+    tenantId: input.tenantId
+  });
+}
+
+export async function deactivateManagementEmployee(
+  input: DeactivateManagementEmployeeInput,
+  options: Pick<ApiRequestOptions, 'baseUrl' | 'signal'> = {}
+): Promise<ManagementEmployee> {
+  return requestJson<ManagementEmployee>(
+    'management',
+    backendServices.management.routes.deactivateEmployee(input.employeeId),
+    {
+      ...options,
+      method: 'POST',
+      body: withTenantIdInBody({}, input.tenantId)
+    }
+  );
+}
+
+export async function changeManagementEmployeePin(
+  input: ChangeManagementEmployeePinInput,
+  options: Pick<ApiRequestOptions, 'baseUrl' | 'signal'> = {}
+): Promise<ChangeManagementEmployeePinResponse> {
+  return requestJson<ChangeManagementEmployeePinResponse>(
+    'management',
+    backendServices.management.routes.changeEmployeePin(input.employeeId),
+    {
+      ...options,
+      method: 'PUT',
+      body: withTenantIdInBody({ pin: input.pin }, input.tenantId)
     }
   );
 }

@@ -1,7 +1,6 @@
 export const backendServices = {
   checkout: {
     serviceName: 'checkout-service',
-    defaultBaseUrl: 'http://localhost:3001',
     routes: {
       health: '/health',
       scanCatalogItemByBarcode: (barcode: string) =>
@@ -18,7 +17,6 @@ export const backendServices = {
   },
   inventory: {
     serviceName: 'inventory-service',
-    defaultBaseUrl: 'http://localhost:3002',
     routes: {
       health: '/health',
       registerSupplierInvoice: '/supplier-invoices',
@@ -28,12 +26,14 @@ export const backendServices = {
   },
   management: {
     serviceName: 'management-service',
-    defaultBaseUrl: 'http://localhost:3003',
     routes: {
       health: '/health',
       registerProduct: '/products',
       updateProductPrice: (productId: string) => `/products/${productId}/price`,
       registerEmployee: '/employees',
+      listEmployees: '/employees',
+      deactivateEmployee: (employeeId: string) => `/employees/${employeeId}/deactivation`,
+      changeEmployeePin: (employeeId: string) => `/employees/${employeeId}/pin`,
       generateProfitAndLossReport: '/reports/profit-and-loss'
     }
   }

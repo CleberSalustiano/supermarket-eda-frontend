@@ -75,7 +75,12 @@ export interface CancelCheckoutSaleInput {
   tenantId: string;
   saleId: string;
   reason: string;
-  managerApprovalCode?: string;
+  managerApproval?: CheckoutManagerApproval;
+}
+
+export interface CheckoutManagerApproval {
+  employeeCode: string;
+  pin: string;
 }
 
 export interface CloseCheckoutPosSessionInput {
@@ -94,6 +99,12 @@ export interface CheckoutSaleItem {
   lineTotal: number;
 }
 
+export interface CheckoutSaleApprover {
+  employeeId: string;
+  employeeCode: string;
+  fullName: string;
+}
+
 export interface CheckoutSale {
   saleId: string;
   tenantId: string;
@@ -106,6 +117,7 @@ export interface CheckoutSale {
   completedAt: string | null;
   canceledAt: string | null;
   cancellationReason: string | null;
+  cancellationApprovedBy: CheckoutSaleApprover | null;
   totalItemsQuantity: number;
   subtotal: number;
   total: number;
@@ -287,9 +299,14 @@ export async function cancelCheckoutSale(
       body: withTenantIdInBody(
         {
           reason: input.reason,
-          ...(input.managerApprovalCode === undefined
+          ...(input.managerApproval === undefined
             ? {}
-            : { managerApprovalCode: input.managerApprovalCode })
+            : {
+                managerApproval: {
+                  employeeCode: input.managerApproval.employeeCode,
+                  pin: input.managerApproval.pin
+                }
+              })
         },
         input.tenantId
       )

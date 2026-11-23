@@ -6,8 +6,6 @@ import type {
   CheckoutSaleStatus
 } from '@supermarket/api-sdk';
 
-import { formatCurrency, formatPaymentMethod } from './formatters';
-
 export interface CheckoutCapabilities {
   hasOpenSession: boolean;
   hasMutableSale: boolean;
@@ -92,21 +90,4 @@ export function deriveCheckoutCapabilities(
     canCloseSession: hasOpenSession && saleSettled,
     requiresManagerApproval: sale !== null && (sale.status === 'PAID' || sale.status === 'COMPLETED')
   };
-}
-
-export function buildSaleDefinitionItems(sale: CheckoutSale): Array<{ label: string; value: string | number }> {
-  return [
-    { label: 'Status', value: sale.status },
-    { label: 'Subtotal', value: formatCurrency(sale.subtotal) },
-    { label: 'Total', value: formatCurrency(sale.total) },
-    { label: 'Items', value: sale.totalItemsQuantity },
-    {
-      label: 'Payment method',
-      value: sale.paymentMethod === null ? 'Not paid yet' : formatPaymentMethod(sale.paymentMethod)
-    },
-    {
-      label: 'Paid amount',
-      value: sale.paidAmount === null ? 'Not paid yet' : formatCurrency(sale.paidAmount)
-    }
-  ];
 }
