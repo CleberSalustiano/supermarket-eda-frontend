@@ -1,51 +1,77 @@
 import { checkoutSalePaymentMethods } from '@supermarket/api-sdk';
+import type { LocaleFormat } from '@supermarket/frontend-i18n';
 import { z } from 'zod';
 
-const moneyPattern = /^\d+(?:\.\d{1,2})?$/;
-const positiveIntegerPattern = /^[1-9]\d*$/;
+import type { CheckoutMessages } from '../../../i18n';
 
-export const tenantIdSchema = z.string().uuid('Tenant id must be a valid UUID.');
+const MIN_REASON_LENGTH = 4;
+const MAX_REASON_LENGTH = 255;
+export const MAX_MANAGER_EMPLOYEE_CODE_LENGTH = 32;
+export const MAX_MANAGER_PIN_LENGTH = 12;
+const MIN_MANAGER_EMPLOYEE_CODE_LENGTH = 2;
+const MANAGER_PIN_PATTERN = /^\d{4,12}$/;
 
-export const openSessionFormSchema = z.object({
-  registerId: z.string().trim().min(2, 'Register id must have at least 2 characters.').max(32),
-  operatorId: z.string().uuid('Operator id must be a valid UUID.'),
-  openingFloatAmount: z
-    .string()
-    .trim()
-    .regex(moneyPattern, 'Opening float must be a valid amount with up to 2 decimals.')
-});
+/** Register opening: user-facing messages and decimal rules follow the active locale. */
+export function createOpenSessionSchema(m: CheckoutMessages, fmt: LocaleFormat) {
+  return z.object({
+    registerId: z.string().trim().min(2, m.validation.registerId).max(32, m.validation.registerId),
+    operatorId: z.string().trim().uuid(m.validation.operatorId),
+    openingFloatAmount: z.string().trim().regex(fmt.decimalPattern, m.validation.money)
+  });
+}
 
-export const cartMutationFormSchema = z.object({
-  barcode: z.string().trim().min(4, 'Barcode must have at least 4 characters.').max(64),
-  quantity: z
-    .string()
-    .trim()
-    .regex(positiveIntegerPattern, 'Quantity must be a positive whole number.')
-});
+export function createPaymentSchema(m: CheckoutMessages, fmt: LocaleFormat) {
+  return z.object({
+    paymentMethod: z.enum(checkoutSalePaymentMethods),
+    paidAmount: z
+      .string()
+      .trim()
+      .regex(fmt.decimalPattern, m.validation.money)
+      .refine((value) => (fmt.parseDecimal(value) ?? 0) > 0, m.validation.positive)
+  });
+}
 
-export const paymentFormSchema = z.object({
-  paymentMethod: z.enum(checkoutSalePaymentMethods, 'Payment method is required.'),
-  paidAmount: z
-    .string()
-    .trim()
-    .regex(moneyPattern, 'Paid amount must be a valid amount with up to 2 decimals.')
-    .refine((value) => Number(value) > 0, 'Paid amount must be greater than zero.')
-});
+/** The manager code and PIN are verified by Management; they are only validated here when required. */
+export function createCancelSaleSchema(m: CheckoutMessages, requiresManagerApproval: boolean) {
+  return z
+    .object({
+      reason: z
+        .string()
+        .trim()
+        .min(MIN_REASON_LENGTH, m.validation.reason)
+        .max(MAX_REASON_LENGTH, m.validation.reason),
+      managerEmployeeCode: z.string().trim(),
+      managerPin: z.string()
+    })
+    .superRefine((values, context) => {
+      if (!requiresManagerApproval) {
+        return;
+      }
+      const codeLength = values.managerEmployeeCode.length;
+      if (codeLength < MIN_MANAGER_EMPLOYEE_CODE_LENGTH || codeLength > MAX_MANAGER_EMPLOYEE_CODE_LENGTH) {
+        context.addIssue({
+          code: 'custom',
+          path: ['managerEmployeeCode'],
+          message: m.cancel.managerCodeRequired
+        });
+      }
+      if (!MANAGER_PIN_PATTERN.test(values.managerPin)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['managerPin'],
+          message: m.cancel.managerPinInvalid
+        });
+      }
+    });
+}
 
-export const cancelSaleFormSchema = z.object({
-  reason: z.string().trim().min(4, 'Cancellation reason must have at least 4 characters.').max(255),
-  managerApprovalCode: z.string().trim().max(64)
-});
+export function createCloseSessionSchema(m: CheckoutMessages, fmt: LocaleFormat) {
+  return z.object({
+    declaredCashAmount: z.string().trim().regex(fmt.decimalPattern, m.validation.money)
+  });
+}
 
-export const closeSessionFormSchema = z.object({
-  declaredCashAmount: z
-    .string()
-    .trim()
-    .regex(moneyPattern, 'Declared cash amount must be a valid amount with up to 2 decimals.')
-});
-
-export type OpenSessionFormValues = z.infer<typeof openSessionFormSchema>;
-export type CartMutationFormValues = z.infer<typeof cartMutationFormSchema>;
-export type PaymentFormValues = z.infer<typeof paymentFormSchema>;
-export type CancelSaleFormValues = z.infer<typeof cancelSaleFormSchema>;
-export type CloseSessionFormValues = z.infer<typeof closeSessionFormSchema>;
+export type OpenSessionFormValues = z.infer<ReturnType<typeof createOpenSessionSchema>>;
+export type PaymentFormValues = z.infer<ReturnType<typeof createPaymentSchema>>;
+export type CancelSaleFormValues = z.infer<ReturnType<typeof createCancelSaleSchema>>;
+export type CloseSessionFormValues = z.infer<ReturnType<typeof createCloseSessionSchema>>;

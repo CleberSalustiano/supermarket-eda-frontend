@@ -7,5 +7,10 @@
   "dependencies": {
     "zod": "3.25.67"
   },
-  "exports": "./src/index.ts"
+  "exports": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "npm run typecheck",
+    "test": "vitest run"
+  }
 }

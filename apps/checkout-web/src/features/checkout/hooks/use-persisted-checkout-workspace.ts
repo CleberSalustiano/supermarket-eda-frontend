@@ -7,19 +7,32 @@ import {
   type CheckoutWorkspaceState
 } from '../lib/workspace';
 
-export function usePersistedCheckoutWorkspace(): [
-  CheckoutWorkspaceState,
-  Dispatch<SetStateAction<CheckoutWorkspaceState>>,
-  () => void
-] {
+/** A blocked or full storage must never break the cashier screen, so every access is guarded. */
+export function readStoredWorkspace(): string | null {
+  try {
+    return window.localStorage.getItem(checkoutWorkspaceStorageKey);
+  } catch {
+    return null;
+  }
+}
+
+export function writeStoredWorkspace(workspace: CheckoutWorkspaceState): void {
+  try {
+    window.localStorage.setItem(checkoutWorkspaceStorageKey, JSON.stringify(workspace));
+  } catch {
+    // Persistence is best effort: the in-memory workspace keeps working.
+  }
+}
+
+export function usePersistedCheckoutWorkspace(
+  tenantId: string
+): [CheckoutWorkspaceState, Dispatch<SetStateAction<CheckoutWorkspaceState>>, () => void] {
   const [workspace, setWorkspace] = useState<CheckoutWorkspaceState>(() => {
     if (typeof window === 'undefined') {
       return createDefaultCheckoutWorkspaceState();
     }
 
-    return parseCheckoutWorkspaceState(
-      window.localStorage.getItem(checkoutWorkspaceStorageKey)
-    );
+    return parseCheckoutWorkspaceState(readStoredWorkspace(), tenantId);
   });
 
   useEffect(() => {
@@ -27,7 +40,7 @@ export function usePersistedCheckoutWorkspace(): [
       return;
     }
 
-    window.localStorage.setItem(checkoutWorkspaceStorageKey, JSON.stringify(workspace));
+    writeStoredWorkspace(workspace);
   }, [workspace]);
 
   function resetWorkspace(): void {

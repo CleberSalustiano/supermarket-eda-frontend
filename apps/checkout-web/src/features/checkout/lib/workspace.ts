@@ -1,9 +1,6 @@
 import { checkoutSalePaymentMethods } from '@supermarket/api-sdk';
 import { z } from 'zod';
 
-export const defaultCheckoutTenantId = '8f6d7df2-0d8a-4c81-9ad3-6f9c3c5198b1';
-export const defaultCheckoutRegisterId = 'register-01';
-export const defaultCheckoutOperatorId = '2b6b69a3-1c2e-442e-928a-8f0614aa7d0e';
 export const checkoutWorkspaceStorageKey = 'supermarket.checkout.workspace';
 
 const checkoutPosSessionSchema = z.object({
@@ -30,6 +27,12 @@ const checkoutSaleItemSchema = z.object({
   lineTotal: z.number()
 });
 
+const checkoutSaleApproverSchema = z.object({
+  employeeId: z.string().min(1),
+  employeeCode: z.string().min(1),
+  fullName: z.string().min(1)
+});
+
 const checkoutSaleSchema = z.object({
   saleId: z.string().uuid(),
   tenantId: z.string().uuid(),
@@ -42,6 +45,8 @@ const checkoutSaleSchema = z.object({
   completedAt: z.string().nullable(),
   canceledAt: z.string().nullable(),
   cancellationReason: z.string().nullable(),
+  // Sales stored before manager verification existed have no approver.
+  cancellationApprovedBy: checkoutSaleApproverSchema.nullish().transform((value) => value ?? null),
   totalItemsQuantity: z.number().int().nonnegative(),
   subtotal: z.number(),
   total: z.number(),
@@ -51,7 +56,6 @@ const checkoutSaleSchema = z.object({
 });
 
 export const checkoutWorkspaceStateSchema = z.object({
-  tenantId: z.string().trim().min(1),
   activeSession: checkoutPosSessionSchema.nullable(),
   activeSale: checkoutSaleSchema.nullable()
 });
@@ -60,14 +64,18 @@ export type CheckoutWorkspaceState = z.infer<typeof checkoutWorkspaceStateSchema
 
 export function createDefaultCheckoutWorkspaceState(): CheckoutWorkspaceState {
   return {
-    tenantId: defaultCheckoutTenantId,
     activeSession: null,
     activeSale: null
   };
 }
 
+/**
+ * Restores the persisted workspace. A workspace saved for another tenant is discarded,
+ * because its session and sale cannot be used with the current tenant.
+ */
 export function parseCheckoutWorkspaceState(
-  value: string | null
+  value: string | null,
+  tenantId: string
 ): CheckoutWorkspaceState {
   if (value === null || value.trim().length === 0) {
     return createDefaultCheckoutWorkspaceState();
@@ -78,6 +86,12 @@ export function parseCheckoutWorkspaceState(
     const validationResult = checkoutWorkspaceStateSchema.safeParse(parsedValue);
 
     if (!validationResult.success) {
+      return createDefaultCheckoutWorkspaceState();
+    }
+
+    const { activeSession } = validationResult.data;
+
+    if (activeSession !== null && activeSession.tenantId !== tenantId) {
       return createDefaultCheckoutWorkspaceState();
     }
 

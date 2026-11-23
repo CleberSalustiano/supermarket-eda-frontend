@@ -23,14 +23,13 @@
     "local:web:stop": "node scripts/local-web-apps.js stop",
     "local:web:status": "node scripts/local-web-apps.js status",
     "test:scripts": "node --test scripts/",
+    "check:bundles": "node scripts/check-production-bundles.js",
     "test:e2e:web": "npm run test:e2e --workspace @supermarket/checkout-web && npm run test:e2e --workspace @supermarket/inventory-web && npm run test:e2e --workspace @supermarket/management-web"
   },
   "engines": {
     "node": ">=20.0.0"
   },
   "devDependencies": {
-    "@fontsource/ibm-plex-mono": "5.1.1",
-    "@fontsource/manrope": "5.1.0",
     "@testing-library/jest-dom": "6.6.3",
     "@testing-library/jest-native": "^5.4.3",
     "@testing-library/react": "16.3.0",

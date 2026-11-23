@@ -1,16 +1,13 @@
+import tokens from './theme/tokens.json';
+
+export type ThemeName = 'light' | 'dark';
+export type ThemeTokenName = keyof (typeof tokens)['light'];
+export type ThemeTokens = Record<ThemeTokenName, string>;
+
+export const themeTokens: Record<ThemeName, ThemeTokens> = tokens;
+
 export const designTokens = {
-  colors: {
-    canvas: '#f5f5f4',
-    panel: '#fdfcfb',
-    ink: '#1f2937',
-    muted: '#6b7280',
-    line: '#d6d3d1',
-    accent: '#1f766e',
-    accentSoft: '#d9f0eb',
-    success: '#166534',
-    warning: '#a16207',
-    danger: '#b91c1c'
-  },
+  colors: themeTokens.light,
   spacing: {
     section: '1.5rem',
     panel: '1.25rem'

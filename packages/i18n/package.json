@@ -1,0 +1,16 @@
+{
+  "name": "@supermarket/frontend-i18n",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Typed in-house dictionaries, locale provider and locale-aware formatting for frontend apps.",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "npm run typecheck",
+    "test": "vitest run"
+  }
+}

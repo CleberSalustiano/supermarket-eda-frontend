@@ -38,7 +38,7 @@ export function ServiceStatusCard({
           </View>
         )}
       </View>
-      <Text className="mt-4 font-mono text-xs text-muted">{timestamp ?? 'No timestamp yet'}</Text>
+      <Text className="mt-4 text-xs text-muted">{timestamp ?? 'No timestamp yet'}</Text>
     </View>
   );
 }

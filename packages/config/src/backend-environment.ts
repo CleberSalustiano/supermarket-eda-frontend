@@ -7,13 +7,7 @@ export const frontendBackendEnvironmentKeys = {
 export type FrontendBackendEnvironmentKey =
   (typeof frontendBackendEnvironmentKeys)[keyof typeof frontendBackendEnvironmentKeys];
 
-export const defaultServiceBaseUrls = {
-  checkout: 'http://localhost:3001',
-  inventory: 'http://localhost:3002',
-  management: 'http://localhost:3003'
-} as const;
-
-export type FrontendServiceName = keyof typeof defaultServiceBaseUrls;
+export type FrontendServiceName = 'checkout' | 'inventory' | 'management';
 
 export const serviceEnvironmentKeyMap: Record<FrontendServiceName, FrontendBackendEnvironmentKey> =
   {
@@ -22,13 +16,16 @@ export const serviceEnvironmentKeyMap: Record<FrontendServiceName, FrontendBacke
   management: frontendBackendEnvironmentKeys.managementBaseUrl
   };
 
+/** Services have no built-in URL: every caller supplies the base URL from its own configuration. */
 export function resolveServiceBaseUrl(
   service: FrontendServiceName,
   overrides: Partial<Record<FrontendServiceName, string>> = {}
 ): string {
   const override = overrides[service];
 
-  return override !== undefined && override.trim().length > 0
-    ? override
-    : defaultServiceBaseUrls[service];
+  if (override === undefined || override.trim().length === 0) {
+    throw new Error(`No base URL configured for the ${service} service.`);
+  }
+
+  return override;
 }
